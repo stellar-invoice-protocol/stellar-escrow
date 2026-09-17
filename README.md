@@ -31,7 +31,12 @@ Freelance and cross-border payments still rely on middlemen who take 5–15% and
 
 ## Status
 
-Early development. The contract is the priority; SDK, frontend, and indexer components are in progress.
+Early development. The contract is the priority; SDK, frontend, and indexer components are scaffolds.
+
+The contract is the only component with implemented on-chain behavior today. The SDK currently exports
+package metadata, the indexer only provides a buildable event-indexer entry point, and the frontend is a
+static dashboard placeholder. Treat these integrations as development surfaces rather than production-ready
+clients.
 
 ## Quick Start
 

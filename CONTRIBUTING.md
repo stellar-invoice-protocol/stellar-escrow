@@ -14,7 +14,8 @@ Thanks for helping build Stellar Escrow.
 ```bash
 cd contracts/escrow && cargo test
 cd sdk-ts && npm test
-cd frontend && npm test
+cd frontend && npm run lint
+```
 
 Picking an issue
 Issues are labeled by complexity: complexity:trivial, complexity:medium, complexity:high. Read the acceptance criteria before starting. If anything is unclear, comment on the issue first — don't guess.
@@ -57,3 +58,4 @@ Code snippet
 # Copy to deploy-testnet.env and fill in. Never commit deploy-testnet.env.
 STELLAR_SOURCE=your-identity-name
 NETWORK=testnet
+```

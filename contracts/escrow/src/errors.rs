@@ -7,6 +7,8 @@ pub enum EscrowError {
     EscrowNotFound = 1,
     InvalidAmount = 2,
     InvalidDeadline = 3,
+    InvalidStatus = 4,
+    DeadlineNotPassed = 5,
     NotClient = 4,
     NotFreelancer = 5,
     NotArbiter = 6,

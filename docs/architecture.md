@@ -3,9 +3,9 @@
 ## Repository Structure
 
 - `contracts/escrow/` — Soroban contract (Rust)
-- `sdk-ts/` — TypeScript SDK for frontend/backend integrators
-- `frontend/` — Next.js dashboard (client, freelancer, arbiter views)
-- `indexer/` — Event indexer into Postgres
+- `sdk-ts/` — TypeScript SDK scaffold for frontend/backend integrators
+- `frontend/` — Next.js dashboard scaffold (client, freelancer, arbiter views)
+- `indexer/` — Event indexer scaffold; Postgres persistence is planned
 - `scripts/` — Deploy and verify scripts
 - `docs/` — Documentation and specifications
 
@@ -27,11 +27,28 @@
 4. **Event Emission** → `events.rs` (emit relevant events)
 5. **State Persistence** → `storage.rs` (save updated state)
 
+## Escrow State Machine
+
+| Current state | Operation | Next state | Authorized party |
+|---|---|---|---|
+| Created | fund | Funded | Client |
+| Funded | release | Released | Client |
+| Funded | refund after deadline | Refunded | Client |
+| Funded | raise dispute | Disputed | Client or freelancer |
+| Disputed | resolve dispute | Resolved | Arbiter |
+
+Released, Refunded, and Resolved are terminal states. The contract rejects
+operations that do not match one of the transitions above.
+
 ## Component Interactions
 
-- **Frontend** ↔ **TypeScript SDK** ↔ **Soroban Contract**
+- **Planned:** **Frontend** ↔ **TypeScript SDK** ↔ **Soroban Contract**
 - **Indexer** ← **Contract Events** → **Postgres Database**
 - **Deployment Scripts** → **Stellar Testnet/Mainnet**
+
+The current frontend and SDK do not yet submit contract transactions. The indexer does not yet subscribe
+to events or persist records; those integrations should be added without changing the contract's state
+machine or event names.
 
 ## Technology Stack
 

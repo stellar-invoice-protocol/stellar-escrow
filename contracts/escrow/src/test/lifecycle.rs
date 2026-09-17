@@ -1,3 +1,5 @@
+use soroban_sdk::token;
+use soroban_sdk::testutils::Ledger as _;
 use soroban_sdk::{testutils::Address as _, token};
 
 use crate::errors::EscrowError;
@@ -49,9 +51,50 @@ fn create_rejects_zero_amount() {
 }
 
 #[test]
+fn create_rejects_past_deadline() {
+    let ctx = setup();
+    let err = ctx
+        .client
+        .try_create_escrow(
+            &ctx.client_addr,
+            &ctx.freelancer,
+            &ctx.arbiter,
+            &ctx.token,
+            &1_000,
+            &NOW,
+        )
+        .unwrap_err();
+    assert_eq!(err, Ok(EscrowError::InvalidDeadline));
+}
+
+#[test]
+fn create_rejects_deadline_at_current_timestamp() {
+    let ctx = setup();
+    let err = ctx
+        .client
+        .try_create_escrow(
+            &ctx.client_addr,
+            &ctx.freelancer,
+            &ctx.arbiter,
+            &ctx.token,
+            &1_000,
+            &NOW,
+        )
+        .unwrap_err();
+    assert_eq!(err, Ok(EscrowError::InvalidDeadline));
+}
+
+#[test]
 fn fund_unknown_returns_not_found() {
     let ctx = setup();
     let err = ctx.client.try_fund_escrow(&999).unwrap_err();
+    assert_eq!(err, Ok(EscrowError::EscrowNotFound));
+}
+
+#[test]
+fn get_unknown_returns_not_found() {
+    let ctx = setup();
+    let err = ctx.client.try_get_escrow(&999).unwrap_err();
     assert_eq!(err, Ok(EscrowError::EscrowNotFound));
 }
 
@@ -78,6 +121,77 @@ fn dispute_then_arbiter_resolves_for_freelancer() {
 }
 
 #[test]
+fn freelancer_can_raise_dispute() {
+    let ctx = setup();
+    let id = ctx.client.create_escrow(
+        &ctx.client_addr,
+        &ctx.freelancer,
+        &ctx.arbiter,
+        &ctx.token,
+        &1_000,
+        &FUTURE_DEADLINE,
+    );
+    ctx.client.fund_escrow(&id);
+
+    ctx.client.raise_dispute(&id, &ctx.freelancer);
+
+    assert_eq!(ctx.client.get_escrow(&id).status, EscrowStatus::Disputed);
+}
+
+#[test]
+fn resolve_rejects_non_party_winner() {
+    let ctx = setup();
+    let id = ctx.client.create_escrow(
+        &ctx.client_addr,
+        &ctx.freelancer,
+        &ctx.arbiter,
+        &ctx.token,
+        &1_000,
+        &FUTURE_DEADLINE,
+    );
+    ctx.client.fund_escrow(&id);
+    ctx.client.raise_dispute(&id, &ctx.client_addr);
+    let outsider = soroban_sdk::testutils::Address::generate(&ctx.env);
+
+    let err = ctx.client.try_resolve_dispute(&id, &outsider).unwrap_err();
+    assert_eq!(err, Ok(EscrowError::InvalidStatus));
+}
+
+#[test]
+fn dispute_rejects_non_party_raiser() {
+    let ctx = setup();
+    let id = ctx.client.create_escrow(
+        &ctx.client_addr,
+        &ctx.freelancer,
+        &ctx.arbiter,
+        &ctx.token,
+        &1_000,
+        &FUTURE_DEADLINE,
+    );
+    ctx.client.fund_escrow(&id);
+    let outsider = soroban_sdk::testutils::Address::generate(&ctx.env);
+
+    let err = ctx.client.try_raise_dispute(&id, &outsider).unwrap_err();
+    assert_eq!(err, Ok(EscrowError::InvalidStatus));
+}
+
+#[test]
+fn release_before_funding_fails() {
+    let ctx = setup();
+    let id = ctx.client.create_escrow(
+        &ctx.client_addr,
+        &ctx.freelancer,
+        &ctx.arbiter,
+        &ctx.token,
+        &1_000,
+        &FUTURE_DEADLINE,
+    );
+
+    let err = ctx.client.try_release(&id).unwrap_err();
+    assert_eq!(err, Ok(EscrowError::InvalidStatus));
+}
+
+#[test]
 fn refund_before_deadline_fails() {
     let ctx = setup();
     let id = ctx.client.create_escrow(
@@ -95,6 +209,7 @@ fn refund_before_deadline_fails() {
 }
 
 #[test]
+fn refund_at_deadline_fails() {
 fn refund_after_deadline_callable_by_anyone() {
     let ctx = setup();
     let id = ctx.client.create_escrow(
@@ -106,6 +221,14 @@ fn refund_after_deadline_callable_by_anyone() {
         &FUTURE_DEADLINE,
     );
     ctx.client.fund_escrow(&id);
+    ctx.env.ledger().set_timestamp(FUTURE_DEADLINE);
+
+    let err = ctx.client.try_refund(&id).unwrap_err();
+    assert_eq!(err, Ok(EscrowError::DeadlineNotPassed));
+}
+
+#[test]
+fn refund_after_deadline_returns_funds() {
 
     let token_client = token::Client::new(&ctx.env, &ctx.token);
     let initial_client_balance = token_client.balance(&ctx.client_addr);
@@ -213,6 +336,17 @@ fn cancel_funded_escrow_fails() {
         &FUTURE_DEADLINE,
     );
     ctx.client.fund_escrow(&id);
+    ctx.env.ledger().set_timestamp(FUTURE_DEADLINE + 1);
+
+    ctx.client.refund(&id);
+
+    let token_client = token::Client::new(&ctx.env, &ctx.token);
+    assert_eq!(token_client.balance(&ctx.client_addr), 10_000);
+    assert_eq!(ctx.client.get_escrow(&id).status, EscrowStatus::Refunded);
+}
+
+#[test]
+fn released_escrow_rejects_terminal_operations() {
 
     let err = ctx.client.try_cancel_escrow(&id).unwrap_err();
     assert_eq!(err, Ok(EscrowError::InvalidStatus));
@@ -284,6 +418,14 @@ fn partial_release_invalid_split_fails() {
         &FUTURE_DEADLINE,
     );
     ctx.client.fund_escrow(&id);
+    ctx.client.release(&id);
+
+    assert_eq!(ctx.client.try_refund(&id), Err(Ok(EscrowError::InvalidStatus)));
+    assert_eq!(
+        ctx.client
+            .try_raise_dispute(&id, &ctx.client_addr),
+        Err(Ok(EscrowError::InvalidStatus))
+    );
 
     // Split sum 600 + 300 = 900 != 1000
     let err = ctx.client.try_partial_release(&id, &600, &300).unwrap_err();

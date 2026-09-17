@@ -6,7 +6,7 @@ NETWORK="${NETWORK:-testnet}"
 WASM="contracts/escrow/target/wasm32v1-none/release/stellar_escrow.wasm"
 
 echo "[deploy] building..."
-(cd contracts/escrow && stellar contract build --locked)
+(cd contracts/escrow && stellar contract build)
 
 if [[ ! -f "$WASM" ]]; then
   echo "ERROR: wasm not found at $WASM" >&2
